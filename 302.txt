@@ -1,7 +1,7 @@
 HTTP/1.1 302 Found
 Server: webserver/1.0
 Date: Thu, 04 Nov 2010 12:18:00 GMT
-Location: <path>\ 
+Location: <path>\
 Content-Type: text/html
 Content-Length: 123
 Connection: close
