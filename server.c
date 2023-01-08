@@ -30,7 +30,22 @@ int socketCreation(int, int maxRequests);
 int isFile(char *path) {
     struct stat path_stat;
     stat(path, &path_stat);
-    return S_ISREG(path_stat.st_mode);
+    if (stat(path, &path_stat) != 0) {
+        // Handle error
+        return -1;
+    }
+    if (S_ISREG(path_stat.st_mode)) {
+        //path is a file
+        return 1;
+    }
+    else if (S_ISDIR(path_stat.st_mode)) {
+        // path is a directory
+        return 2;
+    }
+    else {
+        // path is something else
+        return 3;
+    }
 }
 
 /*Utility function to get type of file in requested path*/
@@ -161,7 +176,7 @@ void handleRequest(int sd, char *method, char *path, char *protocol, char *respo
                           "File not found.\n"
                           "</BODY></HTML>\n", date);
         write(sd, response, strlen(response));
-    } else if (is_file == 0 && path[strlen(path) - 1] != '/' && strcmp(path, "/") != 0) { // 302 Error
+    } else if (is_file != 1 && path[strlen(path) - 1] != '/' && strcmp(path, "/") != 0) { // 302 Error
         sprintf(response, "HTTP/1.0 302 Found\r\n"
                           "Server: webserver/1.0\r\n"
                           "Date: %s\r\n"
@@ -175,7 +190,7 @@ void handleRequest(int sd, char *method, char *path, char *protocol, char *respo
                           "Directories must end with a slash.\n"
                           "</BODY></HTML>\n", date, path);
         write(sd, response, strlen(response));
-    } else if (is_file == 0 && path[strlen(path) - 1] == '/') { // Search for index.html in dir
+    } else if (is_file != 1 && path[strlen(path) - 1] == '/') { // Search for index.html in dir
         char indexPath[strlen(path) + strlen("index.html") + 1];
         strcpy(indexPath, path);
         strcat(indexPath, "index.html");
@@ -199,14 +214,13 @@ void handleRequest(int sd, char *method, char *path, char *protocol, char *respo
                 bytesRead += cur;
             }
         } else {
-            char lastModed[128];
             sprintf(response, "HTTP/1.1 200 OK\r\n"
                               "Server: webserver/1.0\r\n"
                               "Date: %s\r\n"
                               "Content-Type: text/html\r\n"
                               "Content-Length: <content-length>\r\n"
                               "Last-Modified: %s\r\n"
-                              "Connection: close\r\n\r\n", date, lastModed);
+                              "Connection: close\r\n\r\n", date, date);
             write(sd, response, strlen(response));
             sprintf(response, "<HTML>\n"
                               "<HEAD><TITLE>Index of %s</TITLE></HEAD>\n"
@@ -214,31 +228,46 @@ void handleRequest(int sd, char *method, char *path, char *protocol, char *respo
                               "<H4>Index of %s</H4>\n"
                               "<table CELLSPACING=8>\n"
                               "<tr><th>Name</th><th>Last Modified</th><th>Size</th></tr>\n", path+1, path+1);
+            write(sd,response, strlen(response));
             DIR *d = opendir(path);
             struct dirent *dir;
             struct stat sb;
+            strcpy(response,"");
             if (d) {
                 while ((dir = readdir(d)) != NULL) {
-                    strcat(response, "<tr>\n<td><A HREF=\"");
-                    strcat(response,path+1);
-                    strcat(response,"\">");
-                    strcat(response, dir->d_name);
-                    strftime(lastModed, 128, RFC1123FMT, gmtime(&sb.st_mtime));
-                    strcat(response, " </A></td><td>");
-                    strcat(response, lastModed);
-                    strcat(response, "</td>\n");
-                    stat(dir->d_name, &sb);
-                    if (S_ISREG(sb.st_mode)) {
+                    char curFileName[200];
+                    char lastModified[128];
+                    strcpy(response,"<tr>");
+                    strcat(response,"<td>");
+                    strcat(response,"<a href = \"");
+                    strcpy(curFileName,path);
+                    strcat(curFileName, dir->d_name);
+                    int type = isFile(curFileName);
+                    stat(curFileName,&sb);
+                    strcpy(curFileName,dir->d_name);
+                    if (type == 2){
+                        strcat(curFileName, "/");
+                    }
+                    strcat(response, curFileName);
+                    strcat(response, "\">");
+                    strcat(response,dir->d_name);
+                    strcat(response,"</a></td>");
+                    strcat(response,"<td>");
+                    strftime(lastModified, 128, RFC1123FMT, gmtime(&sb.st_mtime));
+                    strcat(response,lastModified);
+                    strcat(response,"</td>");
+                    if(type == 1){
                         char fileSize[100];
                         sprintf(fileSize, "<td> %ld </td>\n", sb.st_size);
-                        printf("%s\n",fileSize);
                         strcat(response, fileSize);
                     }
-                    strcat(response, "</tr>\n");
+                    strcat(response,"</tr>");
+                    write(sd,response,strlen(response));
                 }
                 closedir(d);
             }
-            strcat(response, "</table>\n<HR>\n<ADDRESS>webserver/1.0</ADDRESS>\n</BODY></HTML>");
+
+            strcpy(response, "</table>\n<HR>\n<ADDRESS>webserver/1.0</ADDRESS>\n</BODY></HTML>");
             write(sd,response,strlen(response));
         }
     } else if (is_file == 1) { //Path is a file
