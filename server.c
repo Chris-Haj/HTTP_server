@@ -37,12 +37,10 @@ int isFile(char *path) {
     if (S_ISREG(path_stat.st_mode)) {
         //path is a file
         return 1;
-    }
-    else if (S_ISDIR(path_stat.st_mode)) {
+    } else if (S_ISDIR(path_stat.st_mode)) {
         // path is a directory
         return 2;
-    }
-    else {
+    } else {
         // path is something else
         return 3;
     }
@@ -138,7 +136,7 @@ void handleRequest(int sd, char *method, char *path, char *protocol, char *respo
     int is_file = isFile(path);
     char date[128];
     getDate(date);
-    if (strchr(protocol, ' ') != NULL) {
+    if (method && path && protocol && strchr(protocol, ' ') != NULL || (strcmp(protocol,"HTTP/1.0") != 0 && strcmp(protocol,"HTTP/1.1")!=0)) {
         sprintf(response, "HTTP/1.0 400 Bad Request\r\n"
                           "Server: webserver/1.0\r\n"
                           "Date: %s\r\n"
@@ -175,12 +173,14 @@ void handleRequest(int sd, char *method, char *path, char *protocol, char *respo
                           "<BODY><H4>404 Not Found</H4>\n"
                           "File not found.\n"
                           "</BODY></HTML>\n", date);
+        printf("%s",response);
         write(sd, response, strlen(response));
     } else if (is_file != 1 && path[strlen(path) - 1] != '/' && strcmp(path, "/") != 0) { // 302 Error
+
         sprintf(response, "HTTP/1.0 302 Found\r\n"
                           "Server: webserver/1.0\r\n"
                           "Date: %s\r\n"
-                          "Location: %s/\r\n"
+                          "Location: %s/ \r\n"
                           "Content-Type: text/html\r\n"
                           "Content-Length: 123\r\n"
                           "Connection: close\r\n"
@@ -227,58 +227,89 @@ void handleRequest(int sd, char *method, char *path, char *protocol, char *respo
                               "<BODY>\n"
                               "<H4>Index of %s</H4>\n"
                               "<table CELLSPACING=8>\n"
-                              "<tr><th>Name</th><th>Last Modified</th><th>Size</th></tr>\n", path+1, path+1);
-            write(sd,response, strlen(response));
+                              "<tr><th>Name</th><th>Last Modified</th><th>Size</th></tr>\n", path + 1, path + 1);
+            write(sd, response, strlen(response));
             DIR *d = opendir(path);
             struct dirent *dir;
             struct stat sb;
-            strcpy(response,"");
+            strcpy(response, "");
             if (d) {
                 while ((dir = readdir(d)) != NULL) {
                     char curFileName[200];
                     char lastModified[128];
-                    strcpy(response,"<tr>");
-                    strcat(response,"<td>");
-                    strcat(response,"<a href = \"");
-                    strcpy(curFileName,path);
+                    strcpy(response, "<tr>");
+                    strcat(response, "<td>");
+                    strcat(response, "<a href = \"");
+                    strcpy(curFileName, path);
                     strcat(curFileName, dir->d_name);
                     int type = isFile(curFileName);
-                    stat(curFileName,&sb);
-                    strcpy(curFileName,dir->d_name);
-                    if (type == 2){
+                    stat(curFileName, &sb);
+                    strcpy(curFileName, dir->d_name);
+                    if (type == 2) {
                         strcat(curFileName, "/");
                     }
                     strcat(response, curFileName);
                     strcat(response, "\">");
-                    strcat(response,dir->d_name);
-                    strcat(response,"</a></td>");
-                    strcat(response,"<td>");
+                    strcat(response, dir->d_name);
+                    strcat(response, "</a></td>");
+                    strcat(response, "<td>");
                     strftime(lastModified, 128, RFC1123FMT, gmtime(&sb.st_mtime));
-                    strcat(response,lastModified);
-                    strcat(response,"</td>");
-                    if(type == 1){
+                    strcat(response, lastModified);
+                    strcat(response, "</td>");
+                    if (type == 1) {
                         char fileSize[100];
                         sprintf(fileSize, "<td> %ld </td>\n", sb.st_size);
                         strcat(response, fileSize);
                     }
-                    strcat(response,"</tr>");
-                    write(sd,response,strlen(response));
+                    strcat(response, "</tr>");
+                    write(sd, response, strlen(response));
                 }
                 closedir(d);
             }
-
             strcpy(response, "</table>\n<HR>\n<ADDRESS>webserver/1.0</ADDRESS>\n</BODY></HTML>");
-            write(sd,response,strlen(response));
+            write(sd, response, strlen(response));
         }
     } else if (is_file == 1) { //Path is a file
+        bzero(response, BYTE * 10);
         char *getMime = get_mime_type(path);
+        struct stat sb;
+        stat(path, &sb);
+        long int contentLength = sb.st_size;
+        char lastModified[128];
+        strftime(lastModified, 128, RFC1123FMT, gmtime(&sb.st_ctime));
         if (getMime == NULL) { //If file type is not specified.
-
+            sprintf(response, "HTTP/1.0 200 OK\r\n"
+                              "Server: webserver/1.0\r\n"
+                              "Date: %s\r\n"
+                              "Content-Type: %s\r\n"
+                              "Content-Length: %ld\r\n"
+                              "Last-Modified: %s\r\n"
+                              "Connection: close\r\n\r\n", date, "", contentLength, lastModified);
+        } else {
+            sprintf(response, "HTTP/1.0 200 OK\r\n"
+                              "Server: webserver/1.0\r\n"
+                              "Date: %s\r\n"
+                              "Content-Type: %s\r\n"
+                              "Content-Length: %ld\r\n"
+                              "Last-Modified: %s\r\n"
+                              "Connection: close\r\n\r\n", date, getMime, contentLength, lastModified);
         }
+        write(sd, response, strlen(response));
+        unsigned char buffer[BYTE+1];
+        buffer[BYTE]='\0';
         if (access(path, R_OK) != -1) {
-
+            int fd = open(path, O_RDONLY);
+            size_t bytes;
+            while ((bytes = read(fd, buffer, BYTE-1)) > 0) {
+                write(sd, buffer, bytes);
+            }
+            if(bytes < 0){
+                perror("read");
+                exit(1);
+            }
         }
     }
+    close(sd);
 }
 
 void createResponse(void *SD) {
