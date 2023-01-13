@@ -61,6 +61,12 @@ build CMakeFiles/HTTP_server.dir/server.c.o: C_COMPILER__HTTP_server_Debug /home
   OBJECT_DIR = CMakeFiles/HTTP_server.dir
   OBJECT_FILE_DIR = CMakeFiles/HTTP_server.dir
 
+build CMakeFiles/HTTP_server.dir/wisam.c.o: C_COMPILER__HTTP_server_Debug /home/chris/CLionProjects/Networks/HTTP_server/wisam.c || cmake_object_order_depends_target_HTTP_server
+  DEP_FILE = CMakeFiles/HTTP_server.dir/wisam.c.o.d
+  FLAGS = -g -fdiagnostics-color=always -std=gnu11
+  OBJECT_DIR = CMakeFiles/HTTP_server.dir
+  OBJECT_FILE_DIR = CMakeFiles/HTTP_server.dir
+
 
 # =============================================================================
 # Link build statements for EXECUTABLE target HTTP_server
@@ -69,7 +75,7 @@ build CMakeFiles/HTTP_server.dir/server.c.o: C_COMPILER__HTTP_server_Debug /home
 #############################################
 # Link the executable HTTP_server
 
-build HTTP_server: C_EXECUTABLE_LINKER__HTTP_server_Debug CMakeFiles/HTTP_server.dir/threadpool.c.o CMakeFiles/HTTP_server.dir/server.c.o
+build HTTP_server: C_EXECUTABLE_LINKER__HTTP_server_Debug CMakeFiles/HTTP_server.dir/threadpool.c.o CMakeFiles/HTTP_server.dir/server.c.o CMakeFiles/HTTP_server.dir/wisam.c.o
   FLAGS = -g
   OBJECT_DIR = CMakeFiles/HTTP_server.dir
   POST_BUILD = :

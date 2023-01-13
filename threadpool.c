@@ -20,8 +20,9 @@ threadpool *create_threadpool(int num_threads_in_pool) {
     pthread_mutex_init(&pool->qlock, NULL);
     pthread_cond_init(&pool->q_empty, NULL);
     pthread_cond_init(&pool->q_not_empty, NULL);
-    for (int i = 0; i < num_threads_in_pool; i++)
+    for (int i = 0; i < num_threads_in_pool; i++){
         pthread_create(&pool->threads[i], NULL, do_work, pool);
+    }
     return pool;
 }
 /*

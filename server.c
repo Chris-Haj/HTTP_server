@@ -15,11 +15,38 @@
 #define BYTE 1024
 
 //Command line usage: server <port> <pool-size> <max-number-of-request>
+int checkPermsForPath(char *path) {
+    char *copy = alloc(char, strlen(path)+1);
+    strcpy(copy,path);
+    char *beginning = copy;
+    copy = strchr(copy, '/');
+    if (copy == NULL) {
+        free(beginning);
+        return 1;
+    }
+    struct stat permsFiles;
+    while (*copy) {
+        if (*copy == '/') {
+            *copy = '\0';
+            stat(beginning,&permsFiles);
+            if ((permsFiles.st_mode & (S_IRUSR | S_IRGRP | S_IROTH)) != (S_IRUSR | S_IRGRP | S_IROTH)) {
+                *copy = '/';
+                free(beginning);
+                return 0;
+            }
+            *copy = '/';
+        }
+        copy++;
+    }
+    free(beginning);
+    return 1;
+}
+
 int checkValid(int argc, char *args[]);
 
 char *get_mime_type(char *name);
 
-void handleRequest(int sd, char *method, char *path, char *protocol, char *response);
+void handleRequest(int sd, char *method, char *path, char *protocol);
 
 void createResponse(void *SD);
 
@@ -31,7 +58,6 @@ int isFile(char *path) {
     struct stat path_stat;
     stat(path, &path_stat);
     if (stat(path, &path_stat) != 0) {
-        // Handle error
         return -1;
     }
     if (S_ISREG(path_stat.st_mode)) {
@@ -129,14 +155,16 @@ void requestParse(int argc, char *argv[]) {
         i++;
     }
     close(socketFD);
+    destroy_threadpool(pool);
 }
 
-void handleRequest(int sd, char *method, char *path, char *protocol, char *response) {
+void handleRequest(int sd, char *method, char *path, char *protocol) {
+    char response[BYTE*10];
     int exists = access(path, F_OK);
     int is_file = isFile(path);
     char date[128];
     getDate(date);
-    if (method && path && protocol && strchr(protocol, ' ') != NULL || (strcmp(protocol,"HTTP/1.0") != 0 && strcmp(protocol,"HTTP/1.1")!=0)) {
+    if (!method || !path || !protocol || (strncmp(protocol, "HTTP", 4) != 0)) {
         sprintf(response, "HTTP/1.0 400 Bad Request\r\n"
                           "Server: webserver/1.0\r\n"
                           "Date: %s\r\n"
@@ -161,7 +189,22 @@ void handleRequest(int sd, char *method, char *path, char *protocol, char *respo
                           "Method is not supported.\n"
                           "</BODY></HTML>\n", date);
         write(sd, response, strlen(response));
-    } else if (exists == -1) {// 404 Error
+    } else if(checkPermsForPath(path) == 0) {//send 403 forbidden (File 403.txt)){
+        sprintf(response,"HTTP/1.1 403 Forbidden\r\n"
+                         "Server: webserver/1.0\r\n"
+                         "Date: %s\r\n"
+                         "Content-Type: text/html\r\n"
+                         "Content-Length: 111\r\n"
+                         "Connection: close\r\n"
+                         "\r\n"
+                         "<HTML><HEAD><TITLE>403 Forbidden</TITLE></HEAD>\n"
+                         "<BODY><H4>403 Forbidden</H4>\n"
+                         "Access denied.\n"
+                         "</BODY></HTML>",date);
+        write(sd,response,strlen(response));
+    }
+    
+    else if (exists == -1) {// 404 Error
         sprintf(response, "HTTP/1.0 404 Not Found\r\n"
                           "Server: webserver/1.0\r\n"
                           "Date: %s\r\n"
@@ -173,10 +216,8 @@ void handleRequest(int sd, char *method, char *path, char *protocol, char *respo
                           "<BODY><H4>404 Not Found</H4>\n"
                           "File not found.\n"
                           "</BODY></HTML>\n", date);
-        printf("%s",response);
         write(sd, response, strlen(response));
-    } else if (is_file != 1 && path[strlen(path) - 1] != '/' && strcmp(path, "/") != 0) { // 302 Error
-
+    } else if (is_file == 2 && path[strlen(path) - 1] != '/' && strcmp(path, "/") != 0) { // 302 Error
         sprintf(response, "HTTP/1.0 302 Found\r\n"
                           "Server: webserver/1.0\r\n"
                           "Date: %s\r\n"
@@ -210,7 +251,7 @@ void handleRequest(int sd, char *method, char *path, char *protocol, char *respo
                               "Connection: close\r\n\r\n", date, mime, statsOfFile.st_size);
             write(sd, response, strlen(response));
             while ((cur = read(fd, reader, BYTE)) > 0) {
-                write(sd, reader, strlen(reader));
+                write(sd, reader, cur);
                 bytesRead += cur;
             }
         } else {
@@ -246,8 +287,13 @@ void handleRequest(int sd, char *method, char *path, char *protocol, char *respo
                     stat(curFileName, &sb);
                     strcpy(curFileName, dir->d_name);
                     if (type == 2) {
+                        if (strchr(curFileName, ' ') != NULL) {
+                            char temp[250];
+
+                        }
                         strcat(curFileName, "/");
                     }
+                    printf("%s\n", curFileName);
                     strcat(response, curFileName);
                     strcat(response, "\">");
                     strcat(response, dir->d_name);
@@ -295,17 +341,13 @@ void handleRequest(int sd, char *method, char *path, char *protocol, char *respo
                               "Connection: close\r\n\r\n", date, getMime, contentLength, lastModified);
         }
         write(sd, response, strlen(response));
-        unsigned char buffer[BYTE+1];
-        buffer[BYTE]='\0';
+        unsigned char buffer[BYTE + 1];
+        buffer[BYTE] = '\0';
         if (access(path, R_OK) != -1) {
             int fd = open(path, O_RDONLY);
             size_t bytes;
-            while ((bytes = read(fd, buffer, BYTE-1)) > 0) {
+            while ((bytes = read(fd, buffer, BYTE - 1)) > 0) {
                 write(sd, buffer, bytes);
-            }
-            if(bytes < 0){
-                perror("read");
-                exit(1);
             }
         }
     }
@@ -315,26 +357,24 @@ void handleRequest(int sd, char *method, char *path, char *protocol, char *respo
 void createResponse(void *SD) {
     int socketDescriptor = *((int *) SD);
     char buffer[BYTE] = {0};
-    char *response = alloc(char, BYTE * 10);
-    memset(response, '\0', BYTE);
     char *end = NULL;
     size_t bytes_read, total_bytes_read = 0;
     while ((bytes_read = read(socketDescriptor, buffer, BYTE)) > 0) {
+        if (bytes_read == -1) {
+            perror("read");
+            exit(1);
+        }
         total_bytes_read += bytes_read;
         if ((end = strstr(buffer, "\r\n")))
             break;
     }
-    if (end)
+    if (end) //After finding the first \r\n, we cut off the rest of the buffer by replacing it with a null terminator.
         *end = '\0';
-    /*Split the first line in the request to the method, path, and protocol by using strtok and using space as delimiter*/
-    char *method = strtok(buffer, " ");
-    char *path = strtok(NULL, " ");
+    char method[10]={0}, path[100]={0}, protocol[10]={0};
+    sscanf(buffer, "%s %s %s", method, path, protocol);
     char curPath[strlen(path) + 2]; // add . to path to serve as root directory
     strcpy(curPath, ".");
     strcat(curPath, path);
-    path = curPath;
-    char *protocol = strtok(NULL, "\0");
-    handleRequest(socketDescriptor, method, path, protocol, response);
-    free(response);
+    handleRequest(socketDescriptor, method, curPath, protocol);
     close(socketDescriptor);
 }
