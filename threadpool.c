@@ -1,5 +1,6 @@
 #include "threadpool.h"
 #include <stdlib.h>
+#include <stdio.h>
 
 #define alloc(type, size) (type *) malloc(sizeof(type)*size)
 /*
@@ -9,8 +10,12 @@
  * */
 threadpool *create_threadpool(int num_threads_in_pool) {
     if (num_threads_in_pool <= 0 || num_threads_in_pool > MAXT_IN_POOL)
-        return NULL;
+        exit(1);
     threadpool *pool = alloc(threadpool, 1);
+    if(pool == NULL){
+        perror("malloc");
+        exit(1);
+    }
     pool->num_threads = num_threads_in_pool;
     pool->qsize = 0;
     pool->threads = alloc(pthread_t, num_threads_in_pool);
@@ -20,9 +25,8 @@ threadpool *create_threadpool(int num_threads_in_pool) {
     pthread_mutex_init(&pool->qlock, NULL);
     pthread_cond_init(&pool->q_empty, NULL);
     pthread_cond_init(&pool->q_not_empty, NULL);
-    for (int i = 0; i < num_threads_in_pool; i++){
+    for (int i = 0; i < num_threads_in_pool; i++)
         pthread_create(&pool->threads[i], NULL, do_work, pool);
-    }
     return pool;
 }
 /*

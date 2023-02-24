@@ -1,0 +1,5 @@
+207824772
+Christopher Haj 207824772
+HTTP server
+server.c file that contains functions for creating a socket, parsing the method, path, and protocol and respond to the server.
+threadpool.c file that contains functions for creating a threadpool, assigning work functions to threads and destroying the threadpool.
