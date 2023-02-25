@@ -9,6 +9,7 @@
 #include <sys/stat.h>
 #include "threadpool.h"
 #include <fcntl.h>
+#include <errno.h>
 
 #define alloc(type, size) (type *) malloc(sizeof(type)*size)
 #define RFC1123FMT "%a, %d %b %Y %H:%M:%S GMT"
@@ -24,42 +25,18 @@ void InternalError(int socket, char *date) {
                    "Content-Length: 144\r\n"
                    "Connection: close\r\n"
                    "\r\n"
-                   "<HTML><HEAD><TITLE>500 Internal Server Error</TITLE></HEAD>\n"
-                   "<BODY><H4>500 Internal Server Error</H4>\n"
-                   "Some server side error.\n"
+                   "<HTML><HEAD><TITLE>500 Internal Server Error</TITLE></HEAD>\r\n"
+                   "<BODY><H4>500 Internal Server Error</H4>\r\n"
+                   "Some server side error.\r\n"
                    "</BODY></HTML>", date);
     write(socket, error, strlen(error));
 }
 
 int checkPermsForPath(char *path) {
-    char *copy = alloc(char, strlen(path) + 1);
-    strcpy(copy, path);
-    char *beginning = copy;
-    copy = strchr(copy, '/');
-    if (copy == NULL) {
-        free(beginning);
+    if (access(path, R_OK) == 0) {
         return 1;
     }
-    struct stat permsFiles;
-    while (*copy) { // while copy has not reached the end
-        if (*copy == '/') {
-            *copy = '\0';
-            //if stat fails call InternalError
-            if (stat(beginning, &permsFiles) == -1) {
-                free(beginning);
-                return -1;
-            }
-            if ((permsFiles.st_mode & (S_IRUSR | S_IRGRP | S_IROTH)) != (S_IRUSR | S_IRGRP | S_IROTH)) {
-                *copy = '/';
-                free(beginning);
-                return 0;
-            }
-            *copy = '/';
-        }
-        copy++;
-    }
-    free(beginning);
-    return 1;
+    return 0;
 }
 
 int checkValid(int argc, char *args[]);
@@ -151,6 +128,8 @@ void requestParse(int argc, char *argv[]);
 
 int main(int argc, char *argv[]) {
     requestParse(argc, argv);
+//    int perms = checkPermsForPath("/home/chris/CLionProjects/Networks/HTTP_server/randpath/abc/def/jkl/pq/rst/y/no_permissions.html");
+//    printf("%d", perms);
 }
 
 /*makes sure the command usage is correct.
@@ -185,7 +164,7 @@ void requestParse(int argc, char *argv[]) {
 }
 
 void handleRequest(int sd, char *method, char *path, char *protocol) {
-    char response[BYTE * 10];
+    char response[BYTE * 1000];
     int exists = access(path, F_OK);
     int is_file = isFile(path);
     char date[128];
@@ -193,17 +172,17 @@ void handleRequest(int sd, char *method, char *path, char *protocol) {
     int perms = checkPermsForPath(path);
     //If one of the arguments was still empty or the protocol method was unknown send a bad request error
     if (method[0] == '\0' || path[0] == '\0' || protocol[0] == '\0' || (strncmp(protocol, "HTTP/", 5) != 0)) {
-        sprintf(response, "HTTP/1.0 400 Bad Request\r\n"
-                          "Server: webserver/1.0\r\n"
-                          "Date: %s\r\n"
-                          "Content-Type: text/html\r\n"
-                          "Content-Length: 113\r\n"
-                          "Connection: close\r\n"
+        sprintf(response, "http/1.0 400 bad request\r\n"
+                          "server: webserver/1.0\r\n"
+                          "date: %s\r\n"
+                          "content-type: text/html\r\n"
+                          "content-length: 113\r\n"
+                          "connection: close\r\n"
                           "\r\n"
-                          "<HTML><HEAD><TITLE>400 Bad Request</TITLE></HEAD>\n"
-                          "<BODY><H4>400 Bad request</H4>\n"
-                          "Bad Request.\n"
-                          "</BODY></HTML>\n", date);
+                          "<html><head><title>400 bad request</title></head>\r\n"
+                          "<body><h4>400 bad request</h4>\r\n"
+                          "bad request.\r\n"
+                          "</body></html>", date);
         //if write fails call InternalServerError
         if (write(sd, response, strlen(response)) < 0) {
             InternalError(sd, date);
@@ -215,25 +194,25 @@ void handleRequest(int sd, char *method, char *path, char *protocol) {
                           "Content-Type: text/html\r\n"
                           "Content-Length: 129\r\n"
                           "Connection: close\r\n\r\n"
-                          "<HTML><HEAD><TITLE>501 Not supported</TITLE></HEAD>\n"
-                          "<BODY><H4>501 Not supported</H4>\n"
-                          "Method is not supported.\n"
-                          "</BODY></HTML>\n", date);
+                          "<HTML><HEAD><TITLE>501 Not supported</TITLE></HEAD>\r\n"
+                          "<BODY><H4>501 Not supported</H4>\r\n"
+                          "Method is not supported.\r\n"
+                          "</BODY></HTML>\r\n", date);
         if (write(sd, response, strlen(response)) < 0) {
             InternalError(sd, date);
         }
-    } else if (perms == 0) {//send 403 forbidden (File 403.txt)){
-        sprintf(response, "HTTP/1.1 403 Forbidden\r\n"
+    } else if (perms != 1) {//send 403 forbidden (File 403.txt)){
+        sprintf(response, "HTTP/1.0 403 Forbidden\r\n"
                           "Server: webserver/1.0\r\n"
                           "Date: %s\r\n"
                           "Content-Type: text/html\r\n"
                           "Content-Length: 111\r\n"
                           "Connection: close\r\n"
                           "\r\n"
-                          "<HTML><HEAD><TITLE>403 Forbidden</TITLE></HEAD>\n"
-                          "<BODY><H4>403 Forbidden</H4>\n"
-                          "Access denied.\n"
-                          "</BODY></HTML>", date);
+                          "<HTML><HEAD><TITLE>403 Forbidden</TITLE></HEAD>\r\n"
+                          "<BODY><H4>403 Forbidden</H4>\r\n"
+                          "Access denied.\r\n"
+                          "</BODY></HTML>\r\n", date);
         write(sd, response, strlen(response));
     } else if (exists == -1) {// 404 Error
         sprintf(response, "HTTP/1.0 404 Not Found\r\n"
@@ -243,10 +222,10 @@ void handleRequest(int sd, char *method, char *path, char *protocol) {
                           "Content-Length: 112\r\n"
                           "Connection: close\r\n"
                           "\r\n"
-                          "<HTML><HEAD><TITLE>404 Not Found</TITLE></HEAD>\n"
-                          "<BODY><H4>404 Not Found</H4>\n"
-                          "File not found.\n"
-                          "</BODY></HTML>\n", date);
+                          "<HTML><HEAD><TITLE>404 Not Found</TITLE></HEAD>\r\n"
+                          "<BODY><H4>404 Not Found</H4>\r\n"
+                          "File not found.\r\n"
+                          "</BODY></HTML>\r\n", date);
         if (write(sd, response, strlen(response)) < 0) {
             InternalError(sd, date);
         }
@@ -259,10 +238,10 @@ void handleRequest(int sd, char *method, char *path, char *protocol) {
                           "Content-Length: 123\r\n"
                           "Connection: close\r\n"
                           "\r\n"
-                          "<HTML><HEAD><TITLE>302 Found</TITLE></HEAD>\n"
-                          "<BODY><H4>302 Found</H4>\n"
-                          "Directories must end with a slash.\n"
-                          "</BODY></HTML>\n", date, path);
+                          "<HTML><HEAD><TITLE>302 Found</TITLE></HEAD>\r\n"
+                          "<BODY><H4>302 Found</H4>\r\n"
+                          "Directories must end with a slash.\r\n"
+                          "</BODY></HTML>\r\n", date, path);
         if (write(sd, response, strlen(response)) < 0) {
             InternalError(sd, date);
         }
@@ -299,64 +278,68 @@ void handleRequest(int sd, char *method, char *path, char *protocol) {
                 bytesRead += cur;
             }
         } else {
-            sprintf(response, "HTTP/1.1 200 OK\r\n"
-                              "Server: webserver/1.0\r\n"
-                              "Date: %s\r\n"
-                              "Content-Type: text/html\r\n"
-                              "Content-Length: <content-length>\r\n"
-                              "Last-Modified: %s\r\n"
-                              "Connection: close\r\n\r\n", date, date);
-            if (write(sd, response, strlen(response)) < 0) {
-                InternalError(sd, date);
-            }
-            sprintf(response, "<HTML>\n"
-                              "<HEAD><TITLE>Index of %s</TITLE></HEAD>\n"
-                              "<BODY>\n"
-                              "<H4>Index of %s</H4>\n"
-                              "<table CELLSPACING=8>\n"
-                              "<tr><th>Name</th><th>Last Modified</th><th>Size</th></tr>\n", path + 1, path + 1);
-            if (write(sd, response, strlen(response)) < 0) {
-                InternalError(sd, date);
-            }
+            size_t totalSize = 0;
+            char buffer[BYTE]={0};
+
+
+            sprintf(response, "<HTML>\r\n"
+                              "<HEAD><TITLE>Index of %s</TITLE></HEAD>\r\n\r\n"
+                              "<BODY>\r\n"
+                              "<H4>Index of %s</H4>\r\n\r\n"
+                              "<table CELLSPACING=8>\r\n"
+                              "<tr><th>Name</th><th>Last Modified</th><th>Size</th></tr>\r\n", path + 1, path + 1);
+
             DIR *d = opendir(path);
             struct dirent *dir;
+
             struct stat sb;
-            strcpy(response, "");
+            char FolderDate[100];
+            stat(path,&sb);
+            strftime(FolderDate,sizeof(FolderDate),RFC1123FMT, gmtime(&sb.st_mtime));
             if (d) {
                 while ((dir = readdir(d)) != NULL) {
                     char curFileName[200];
                     char lastModified[128];
-                    strcpy(response, "<tr>");
+                    strcat(response, "\r\n<tr>\r\n");
                     strcat(response, "<td>");
-                    strcat(response, "<a href = \"");
+                    strcat(response, "<a href=\"");
                     strcpy(curFileName, path);
                     strcat(curFileName, dir->d_name);
                     int type = isFile(curFileName);
                     stat(curFileName, &sb);
                     strcpy(curFileName, dir->d_name);
                     if (type == 2) {
-                        strcat(curFileName, "/");
+//                        strcat(curFileName, "/");
                     }
                     strcat(response, curFileName);
                     strcat(response, "\">");
                     strcat(response, dir->d_name);
-                    strcat(response, "</a></td>");
+                    strcat(response, "</a></td>\r\n");
                     strcat(response, "<td>");
                     strftime(lastModified, 128, RFC1123FMT, gmtime(&sb.st_mtime));
                     strcat(response, lastModified);
-                    strcat(response, "</td>");
+                    strcat(response, "</td>\r\n");
                     if (type == 1) {
                         char fileSize[100];
-                        sprintf(fileSize, "<td> %ld </td>\n", sb.st_size);
+                        sprintf(fileSize, "<td>%ld</td>\r\n", sb.st_size);
                         strcat(response, fileSize);
                     }
-                    strcat(response, "</tr>");
-                    write(sd, response, strlen(response));
+                    strcat(response, "</tr>\r\n");
                 }
                 closedir(d);
             }
-            strcpy(response, "</table>\n<HR>\n<ADDRESS>webserver/1.0</ADDRESS>\n</BODY></HTML>");
-            if (write(sd, response, strlen(response)) < 0) {
+            strcat(response, "</table>\r\n<HR>\r\n<ADDRESS>webserver/1.0</ADDRESS>\r\n</BODY></HTML>\r\n\r\n");
+            totalSize = strlen(response);
+            sprintf(buffer, "HTTP/1.0 200 OK\r\n"
+                            "Server: webserver/1.0\r\n"
+                            "Date: %s\r\n"
+                            "Content-Type: text/html\r\n"
+                            "Content-Length: %lu\r\n"
+                            "Last-Modified: %s\r\n"
+                            "Connection: close\r\n\r\n",date,totalSize,FolderDate);
+
+            strcat(buffer,response);
+            if (write(sd, buffer, strlen(buffer)) < 0) {
                 InternalError(sd, date);
             }
         }

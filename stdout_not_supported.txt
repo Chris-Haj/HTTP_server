@@ -1,0 +1,11 @@
+http/1.0 501 not supported
+server: webserver/1.0
+date: sat, 25 feb 2023 13:45:46 gmt
+content-type: text/html
+content-length: 129
+connection: close
+
+<html><head><title>501 not supported</title></head>
+<body><h4>501 not supported</h4>
+method is not supported.
+</body></html>

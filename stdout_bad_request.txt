@@ -1,0 +1,11 @@
+http/1.0 400 bad request
+server: webserver/1.0
+date: sat, 25 feb 2023 13:45:43 gmt
+content-type: text/html
+content-length: 113
+connection: close
+
+<html><head><title>400 bad request</title></head>
+<body><h4>400 bad request</h4>
+bad request.
+</body></html>

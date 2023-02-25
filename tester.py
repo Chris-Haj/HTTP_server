@@ -13,7 +13,7 @@ HTTPConnection._http_vsn_str = 'HTTP/1.0'
 EXECUTABLE = "ex3"
 C_FILES = "*.c"
 H_FILES = "threadpool.h"
-PORT = 3000
+PORT = 2222
 
 
 def recvall(s: socket.socket):
@@ -379,12 +379,15 @@ def dir_content():
     end_of_headers = msg.find(b'\r\n\r\n') + 4
     if c_len != b'' and int(c_len) != len(msg[end_of_headers:]):
         test_has_succeeded = False
+        print('fail 1')
 
     # check body and head
     if msg.find(b'<HEAD><TITLE>Index of /randpath/abc/def/jkl/pq/uv/z/</TITLE></HEAD>'.lower()) == -1 and \
             msg.find(b'<HEAD><TITLE>Index of ./randpath/abc/def/jkl/pq/uv/z/</TITLE></HEAD>'.lower()) == -1 and \
             msg.find(b'<HEAD><TITLE>Index of randpath/abc/def/jkl/pq/uv/z/</TITLE></HEAD>'.lower()) == -1:
         test_has_succeeded = False
+        print('fail 2')
+
 
     # check table rows
     start_trs = msg.count(b'<tr>')
@@ -393,20 +396,24 @@ def dir_content():
     # check for the correct number of rows
     if start_trs != end_trs:
         test_has_succeeded = False
+        print('fail 3')
 
     if (start_trs != 11) and (start_trs != 13):
         test_has_succeeded = False
+        print('fail 4')
 
     # check names
     for index in range(1, 10):
         if str(msg).find(f'<td><A HREF="{index}">{index}</a></td>'.lower()) == -1:
             test_has_succeeded = False
+            print(f'fail in loop {index+1}')
             break
 
     # check one file with size
     if msg.find(b'<td><A HREF="not_empty.txt">not_empty.txt</a></td>'.lower()) == -1 or \
             msg.find(b'<td>10</td>') == -1:
         test_has_succeeded = False
+        print('fail 5')
 
     return test_has_succeeded
 
